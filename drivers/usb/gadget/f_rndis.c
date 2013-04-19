@@ -819,8 +819,8 @@ rndis_bind(struct usb_configuration *c, struct usb_function *f)
 	rndis->notify_req->complete = rndis_response_complete;
 
 	/* copy descriptors, and track endpoint copies */
-	f->descriptors = usb_copy_descriptors(eth_fs_function);
-	if (!f->descriptors)
+	f->fs_descriptors = usb_copy_descriptors(eth_fs_function);
+	if (!f->fs_descriptors)
 		goto fail;
 
 	/* support all relevant hardware speeds... we expect that when
@@ -894,8 +894,8 @@ fail:
 		usb_free_descriptors(f->ss_descriptors);
 	if (gadget_is_dualspeed(c->cdev->gadget) && f->hs_descriptors)
 		usb_free_descriptors(f->hs_descriptors);
-	if (f->descriptors)
-		usb_free_descriptors(f->descriptors);
+	if (f->fs_descriptors)
+		usb_free_descriptors(f->fs_descriptors);
 
 	if (rndis->notify_req) {
 		kfree(rndis->notify_req->buf);
@@ -927,7 +927,7 @@ rndis_unbind(struct usb_configuration *c, struct usb_function *f)
 		usb_free_descriptors(f->ss_descriptors);
 	if (gadget_is_dualspeed(c->cdev->gadget))
 		usb_free_descriptors(f->hs_descriptors);
-	usb_free_descriptors(f->descriptors);
+	usb_free_descriptors(f->fs_descriptors);
 
 	kfree(rndis->notify_req->buf);
 	usb_ep_free_request(rndis->notify, rndis->notify_req);

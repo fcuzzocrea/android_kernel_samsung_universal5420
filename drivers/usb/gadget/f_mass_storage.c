@@ -2995,7 +2995,7 @@ static void fsg_unbind(struct usb_configuration *c, struct usb_function *f)
 	}
 
 	fsg_common_put(common);
-	usb_free_descriptors(fsg->function.descriptors);
+	usb_free_descriptors(fsg->function.fs_descriptors);
 	usb_free_descriptors(fsg->function.hs_descriptors);
 	usb_free_descriptors(fsg->function.ss_descriptors);
 	kfree(fsg);
@@ -3031,8 +3031,8 @@ static int fsg_bind(struct usb_configuration *c, struct usb_function *f)
 	fsg->bulk_out = ep;
 
 	/* Copy descriptors */
-	f->descriptors = usb_copy_descriptors(fsg_fs_function);
-	if (unlikely(!f->descriptors))
+	f->fs_descriptors = usb_copy_descriptors(fsg_fs_function);
+	if (unlikely(!f->fs_descriptors))
 		return -ENOMEM;
 
 	if (gadget_is_dualspeed(gadget)) {
@@ -3043,7 +3043,7 @@ static int fsg_bind(struct usb_configuration *c, struct usb_function *f)
 			fsg_fs_bulk_out_desc.bEndpointAddress;
 		f->hs_descriptors = usb_copy_descriptors(fsg_hs_function);
 		if (unlikely(!f->hs_descriptors)) {
-			usb_free_descriptors(f->descriptors);
+			usb_free_descriptors(f->fs_descriptors);
 			return -ENOMEM;
 		}
 	}
@@ -3065,7 +3065,7 @@ static int fsg_bind(struct usb_configuration *c, struct usb_function *f)
 		f->ss_descriptors = usb_copy_descriptors(fsg_ss_function);
 		if (unlikely(!f->ss_descriptors)) {
 			usb_free_descriptors(f->hs_descriptors);
-			usb_free_descriptors(f->descriptors);
+			usb_free_descriptors(f->fs_descriptors);
 			return -ENOMEM;
 		}
 	}
