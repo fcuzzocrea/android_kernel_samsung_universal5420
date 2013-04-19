@@ -379,7 +379,7 @@ static int __init loopback_bind_config(struct usb_configuration *c)
 		return -ENOMEM;
 
 	loop->function.name = "loopback";
-	loop->function.descriptors = fs_loopback_descs;
+	loop->function.fs_descriptors = fs_loopback_descs;
 	loop->function.bind = loopback_bind;
 	loop->function.unbind = loopback_unbind;
 	loop->function.set_alt = loopback_set_alt;

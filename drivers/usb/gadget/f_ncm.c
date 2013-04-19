@@ -1282,8 +1282,8 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 	ncm->notify_req->complete = ncm_notify_complete;
 
 	/* copy descriptors, and track endpoint copies */
-	f->descriptors = usb_copy_descriptors(ncm_fs_function);
-	if (!f->descriptors)
+	f->fs_descriptors = usb_copy_descriptors(ncm_fs_function);
+	if (!f->fs_descriptors)
 		goto fail;
 
 	/*
@@ -1336,8 +1336,8 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 	return 0;
 
 fail:
-	if (f->descriptors)
-		usb_free_descriptors(f->descriptors);
+	if (f->fs_descriptors)
+		usb_free_descriptors(f->fs_descriptors);
 
 	if (ncm->notify_req) {
 		kfree(ncm->notify_req->buf);
@@ -1366,7 +1366,7 @@ ncm_unbind(struct usb_configuration *c, struct usb_function *f)
 
 	if (gadget_is_dualspeed(c->cdev->gadget))
 		usb_free_descriptors(f->hs_descriptors);
-	usb_free_descriptors(f->descriptors);
+	usb_free_descriptors(f->fs_descriptors);
 
 	kfree(ncm->notify_req->buf);
 	usb_ep_free_request(ncm->notify, ncm->notify_req);

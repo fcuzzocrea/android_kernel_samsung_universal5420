@@ -659,7 +659,7 @@ f_audio_bind(struct usb_configuration *c, struct usb_function *f)
 	status = -ENOMEM;
 
 	/* copy descriptors, and track endpoint copies */
-	f->descriptors = usb_copy_descriptors(f_audio_desc);
+	f->fs_descriptors = usb_copy_descriptors(f_audio_desc);
 
 	/*
 	 * support all relevant hardware speeds... we expect that when
@@ -683,7 +683,7 @@ f_audio_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct f_audio		*audio = func_to_audio(f);
 
-	usb_free_descriptors(f->descriptors);
+	usb_free_descriptors(f->fs_descriptors);
 	usb_free_descriptors(f->hs_descriptors);
 	kfree(audio);
 }

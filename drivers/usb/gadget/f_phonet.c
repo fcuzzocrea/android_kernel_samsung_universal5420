@@ -521,7 +521,7 @@ int pn_bind(struct usb_configuration *c, struct usb_function *f)
 		pn_fs_source_desc.bEndpointAddress;
 
 	/* Do not try to bind Phonet twice... */
-	fp->function.descriptors = fs_pn_function;
+	fp->function.fs_descriptors = fs_pn_function;
 	fp->function.hs_descriptors = hs_pn_function;
 
 	/* Incoming USB requests */

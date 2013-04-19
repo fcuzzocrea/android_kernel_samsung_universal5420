@@ -493,8 +493,8 @@ static int __init hidg_bind(struct usb_configuration *c, struct usb_function *f)
 	hidg->set_report_buff = NULL;
 
 	/* copy descriptors */
-	f->descriptors = usb_copy_descriptors(hidg_fs_descriptors);
-	if (!f->descriptors)
+	f->fs_descriptors = usb_copy_descriptors(hidg_fs_descriptors);
+	if (!f->fs_descriptors)
 		goto fail;
 
 	if (gadget_is_dualspeed(c->cdev->gadget)) {
@@ -530,7 +530,7 @@ fail:
 	}
 
 	usb_free_descriptors(f->hs_descriptors);
-	usb_free_descriptors(f->descriptors);
+	usb_free_descriptors(f->fs_descriptors);
 
 	return status;
 }
@@ -550,7 +550,7 @@ static void hidg_unbind(struct usb_configuration *c, struct usb_function *f)
 
 	/* free descriptors copies */
 	usb_free_descriptors(f->hs_descriptors);
-	usb_free_descriptors(f->descriptors);
+	usb_free_descriptors(f->fs_descriptors);
 
 	kfree(hidg->report_desc);
 	kfree(hidg->set_report_buff);

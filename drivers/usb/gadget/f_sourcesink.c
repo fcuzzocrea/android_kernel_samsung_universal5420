@@ -461,7 +461,7 @@ static int __init sourcesink_bind_config(struct usb_configuration *c)
 		return -ENOMEM;
 
 	ss->function.name = "source/sink";
-	ss->function.descriptors = fs_source_sink_descs;
+	ss->function.fs_descriptors = fs_source_sink_descs;
 	ss->function.bind = sourcesink_bind;
 	ss->function.unbind = sourcesink_unbind;
 	ss->function.set_alt = sourcesink_set_alt;
