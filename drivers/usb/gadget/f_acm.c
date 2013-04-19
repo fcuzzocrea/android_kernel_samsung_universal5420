@@ -692,8 +692,8 @@ acm_bind(struct usb_configuration *c, struct usb_function *f)
 	acm->notify_req->context = acm;
 
 	/* copy descriptors */
-	f->descriptors = usb_copy_descriptors(acm_fs_function);
-	if (!f->descriptors)
+	f->fs_descriptors = usb_copy_descriptors(acm_fs_function);
+	if (!f->fs_descriptors)
 		goto fail;
 
 	/* support all relevant hardware speeds... we expect that when
@@ -760,7 +760,7 @@ acm_unbind(struct usb_configuration *c, struct usb_function *f)
 		usb_free_descriptors(f->hs_descriptors);
 	if (gadget_is_superspeed(c->cdev->gadget))
 		usb_free_descriptors(f->ss_descriptors);
-	usb_free_descriptors(f->descriptors);
+	usb_free_descriptors(f->fs_descriptors);
 	gs_free_req(acm->notify, acm->notify_req);
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 	kfree(acm->port.func.name);
