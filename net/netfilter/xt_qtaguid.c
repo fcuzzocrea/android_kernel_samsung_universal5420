@@ -1779,6 +1779,11 @@ static bool qtaguid_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	}
 
 	sk = skb->sk;
+	/*
+	 * When in TCP_TIME_WAIT the sk is not a "struct sock" but
+	 * "struct inet_timewait_sock" which is missing fields.
+	 * So we ignore it.
+	 */
 	if (sk == NULL) {
 		/*
 		 * A missing sk->sk_socket happens when packets are in-flight
