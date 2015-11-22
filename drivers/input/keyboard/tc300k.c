@@ -300,30 +300,37 @@ static irqreturn_t tc300k_interrupt(int irq, void *dev_id)
 	index = key_val & TC300K_KEY_INDEX_MASK;
 	press = !!(key_val & TC300K_KEY_PRESS_MASK);
 
-	if (press) {
-		input_report_key(data->input_dev, data->keycode[index], 0);
+	if (data->keycode[index] == KEY_BACK  || data->keycode[index] == 254/*KEY_RECENTS*/)
+	{
+		if (press) {
+			input_report_key(data->input_dev, data->keycode[index], 0);
 #ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
-		dev_notice(&client->dev, "key R\n");
+			dev_notice(&client->dev, "key R\n");
 #else
-		dev_notice(&client->dev,
-			"key R : %d(%d)\n", data->keycode[index], key_val);
+			dev_notice(&client->dev,
+				"key R : %d(%d)\n", data->keycode[index], key_val);
 #endif
 #ifdef CONFIG_INPUT_BOOSTER
-		INPUT_BOOSTER_SEND_EVENT(data->keycode[index], BOOSTER_MODE_OFF);
+			INPUT_BOOSTER_SEND_EVENT(data->keycode[index], BOOSTER_MODE_OFF);
 #endif
-	} else {
-		input_report_key(data->input_dev, data->keycode[index], 1);
+		} else {
+			input_report_key(data->input_dev, data->keycode[index], 1);
 #ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
-		dev_notice(&client->dev, "key P\n");
+			dev_notice(&client->dev, "key P\n");
 #else
-		dev_notice(&client->dev,
-			"key P : %d(%d)\n", data->keycode[index], key_val);
+			dev_notice(&client->dev,
+				"key P : %d(%d)\n", data->keycode[index], key_val);
 #endif
 #ifdef CONFIG_INPUT_BOOSTER
-		INPUT_BOOSTER_SEND_EVENT(data->keycode[index], BOOSTER_MODE_ON);
+			INPUT_BOOSTER_SEND_EVENT(data->keycode[index], BOOSTER_MODE_ON);
 #endif
+		}
+		input_sync(data->input_dev);
 	}
-	input_sync(data->input_dev);
+	else
+	{
+		dev_notice(&client->dev, "Invalid key ignored %d (%d(%d))\n", press, data->keycode[index], key_val);
+	}
 
 	return IRQ_HANDLED;
 }
