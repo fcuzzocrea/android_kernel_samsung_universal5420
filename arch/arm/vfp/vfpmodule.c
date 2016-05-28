@@ -730,5 +730,12 @@ static int __init vfp_init(void)
 	}
 	return 0;
 }
+static int __init vfp_rootfs_init(void)
+{
+	static struct proc_dir_entry *procfs_entry;
+
+	return 0;
+}
 
 late_initcall(vfp_init);
+rootfs_initcall(vfp_rootfs_init);
