@@ -85,7 +85,7 @@ static ssize_t intensity_store(struct device *dev,
 	ret = kstrtoint(buf, 0, &intensity);
 
 	if (intensity < 0 || MAX_INTENSITY < intensity) {
-		pr_err("out of rage\n");
+		pr_err("out of range\n");
 		return -EINVAL;
 	}
 
