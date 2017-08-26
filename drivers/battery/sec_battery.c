@@ -147,14 +147,13 @@ static int sec_bat_set_charge(
 	union power_supply_propval val;
 
 	struct timespec ts;
-	ktime_t current_time;
+    ktime_t current_time;
 
 	val.intval = battery->status;
 	psy_do_property("sec-charger", set,
 		POWER_SUPPLY_PROP_STATUS, val);
 #if defined(ANDROID_ALARM_ACTIVATED)
-	current_time = alarm_get_elapsed_realtime();
-	ts = ktime_to_timespec(current_time);
+	get_monotonic_boottime(&ts);
 #else
 	current_time = ktime_get_boottime();
 	ts = ktime_to_timespec(current_time);
@@ -1223,13 +1222,16 @@ static void  sec_bat_event_program_alarm(
 {
 #if defined(ANDROID_ALARM_ACTIVATED)
 	ktime_t low_interval = ktime_set(seconds - 10, 0);
-	ktime_t slack = ktime_set(20, 0);
 	ktime_t next;
 
 	next = ktime_add(battery->last_event_time, low_interval);
 
-	alarm_start_range(&battery->event_termination_alarm,
-		next, ktime_add(next, slack));
+	/* The original slack time called for, 20 seconds, exceeds
+	 * the length allowed for an unsigned long in nanoseconds. Use
+	 * ULONG_MAX instead
+	 */
+	hrtimer_start_range_ns(&battery->event_termination_hrtimer,
+		next, ULONG_MAX, HRTIMER_MODE_ABS);
 #else
 	alarm_start(&battery->event_termination_alarm,
 		ktime_add(battery->last_event_time, ktime_set(seconds - 10, 0)));
@@ -1237,15 +1239,20 @@ static void  sec_bat_event_program_alarm(
 }
 
 #if defined(ANDROID_ALARM_ACTIVATED)
-static void sec_bat_event_expired_timer_func(struct alarm *alarm)
+enum hrtimer_restart sec_bat_event_expired_timer_func(struct hrtimer *timer)
 #else
 static enum alarmtimer_restart sec_bat_event_expired_timer_func(
 	struct alarm *alarm, ktime_t now)
 #endif
 {
 	struct sec_battery_info *battery =
+#if defined(ANDROID_ALARM_ACTIVATED)
+		container_of(timer, struct sec_battery_info,
+			event_termination_hrtimer);
+#else
 		container_of(alarm, struct sec_battery_info,
 			event_termination_alarm);
+#endif
 
 	battery->event &= (~battery->event_wait);
 	dev_info(battery->dev,
@@ -1253,6 +1260,8 @@ static enum alarmtimer_restart sec_bat_event_expired_timer_func(
 
 #if !defined(ANDROID_ALARM_ACTIVATED)
 	return ALARMTIMER_NORESTART;
+#else
+    return HRTIMER_NORESTART;
 #endif
 }
 
@@ -1272,7 +1281,11 @@ static void sec_bat_event_set(
 		return;
 	}
 
+#if defined(ANDROID_ALARM_ACTIVATED)
+	hrtimer_cancel(&battery->event_termination_hrtimer);
+#else
 	alarm_cancel(&battery->event_termination_alarm);
+#endif
 
 	battery->event &= (~battery->event_wait);
 
@@ -1290,7 +1303,7 @@ static void sec_bat_event_set(
 		}
 		battery->event_wait = event;
 #if defined(ANDROID_ALARM_ACTIVATED)
-		battery->last_event_time = alarm_get_elapsed_realtime();
+		battery->last_event_time = ktime_get_boottime();
 #else
 		battery->last_event_time = ktime_get_boottime();
 #endif
@@ -1425,10 +1438,7 @@ static bool sec_bat_time_management(
 	unsigned long charging_time;
 	struct timespec ts;
 #if defined(ANDROID_ALARM_ACTIVATED)
-	ktime_t current_time;
-
-	current_time = alarm_get_elapsed_realtime();
-	ts = ktime_to_timespec(current_time);
+	get_monotonic_boottime(&ts);
 #else
 	get_monotonic_boottime(&ts);
 #endif
@@ -1925,12 +1935,15 @@ static void sec_bat_program_alarm(
 {
 #if defined(ANDROID_ALARM_ACTIVATED)
 	ktime_t low_interval = ktime_set(seconds, 0);
-	ktime_t slack = ktime_set(10, 0);
 	ktime_t next;
 
 	next = ktime_add(battery->last_poll_time, low_interval);
-	alarm_start_range(&battery->polling_alarm,
-		next, ktime_add(next, slack));
+	/* The original slack time called for, 10 seconds, exceeds
+	 * the length allowed for an unsigned long in nanoseconds. Use
+	 * ULONG_MAX instead
+	 */
+	hrtimer_start_range_ns(&battery->polling_hrtimer,
+		next, ULONG_MAX, HRTIMER_MODE_ABS);
 #else
 	alarm_start(&battery->polling_alarm,
 		    ktime_add(battery->last_poll_time, ktime_set(seconds, 0)));
@@ -2089,7 +2102,7 @@ static void sec_bat_set_polling(
 		break;
 	case SEC_BATTERY_MONITOR_ALARM:
 #if defined(ANDROID_ALARM_ACTIVATED)
-		battery->last_poll_time = alarm_get_elapsed_realtime();
+		battery->last_poll_time = ktime_get_boottime();
 #else
 		battery->last_poll_time = ktime_get_boottime();
 #endif
@@ -2165,7 +2178,7 @@ static void sec_bat_monitor_work(
 	dev_dbg(battery->dev, "%s: Start\n", __func__);
 
 /*#if !defined(ANDROID_ALARM_ACTIVATED)
-	alarm_cancel(&battery->polling_alarm);
+	alarm_canhrtimer_cancel(&battery->polling_hrtimer);
 #endif *//* ANDROID_ALARM_ACTIVATED */
 
 	/* monitor once after wakeup */
@@ -2281,16 +2294,20 @@ skip_updating_status:
 }
 
 #if defined(ANDROID_ALARM_ACTIVATED)
-static void sec_bat_alarm(struct alarm *alarm)
+enum hrtimer_restart sec_bat_alarm(struct hrtimer *timer)
 #else
 static enum alarmtimer_restart sec_bat_alarm(
 	struct alarm *alarm, ktime_t now)
 
 #endif
 {
+#if defined(ANDROID_ALARM_ACTIVATED)
+	struct sec_battery_info *battery = container_of(timer,
+				struct sec_battery_info, polling_hrtimer);
+#else
 	struct sec_battery_info *battery = container_of(alarm,
 				struct sec_battery_info, polling_alarm);
-
+#endif
 	dev_dbg(battery->dev,
 			"%s\n", __func__);
 
@@ -2305,6 +2322,8 @@ static enum alarmtimer_restart sec_bat_alarm(
 	}
 #if !defined(ANDROID_ALARM_ACTIVATED)
 	return ALARMTIMER_NORESTART;
+#else
+	return HRTIMER_NORESTART;
 #endif
 }
 
@@ -3671,9 +3690,11 @@ static int __devinit sec_battery_probe(struct platform_device *pdev)
 		battery->pdata->check_batt_id();
 
 #if defined(ANDROID_ALARM_ACTIVATED)
-	alarm_init(&battery->event_termination_alarm,
-			ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP,
-			sec_bat_event_expired_timer_func);
+	hrtimer_init(&battery->event_termination_hrtimer,
+			CLOCK_BOOTTIME,
+			HRTIMER_MODE_ABS);
+	battery->event_termination_hrtimer.function =
+			&sec_bat_event_expired_timer_func;
 #else
 	alarm_init(&battery->event_termination_alarm,
 			ALARM_BOOTTIME,
@@ -3753,10 +3774,12 @@ static int __devinit sec_battery_probe(struct platform_device *pdev)
 			break;
 		case SEC_BATTERY_MONITOR_ALARM:
 #if defined(ANDROID_ALARM_ACTIVATED)
-			battery->last_poll_time = alarm_get_elapsed_realtime();
-			alarm_init(&battery->polling_alarm,
-				ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP,
-				sec_bat_alarm);
+		battery->last_poll_time = ktime_get_boottime();
+		hrtimer_init(&battery->polling_hrtimer,
+			CLOCK_BOOTTIME,
+			HRTIMER_MODE_ABS);
+		battery->polling_hrtimer.function =
+			&sec_bat_alarm;
 #else
 			battery->last_poll_time = ktime_get_boottime();
 			alarm_init(&battery->polling_alarm, ALARM_BOOTTIME,
@@ -3889,7 +3912,11 @@ static int __devexit sec_battery_remove(struct platform_device *pdev)
 		cancel_delayed_work(&battery->polling_work);
 		break;
 	case SEC_BATTERY_MONITOR_ALARM:
+#if defined(ANDROID_ALARM_ACTIVATED)
+		hrtimer_cancel(&battery->polling_hrtimer);
+#else
 		alarm_cancel(&battery->polling_alarm);
+#endif
 		break;
 	default:
 		break;
@@ -3898,8 +3925,11 @@ static int __devexit sec_battery_remove(struct platform_device *pdev)
 #ifdef CONFIG_FAST_BOOT
 	unregister_fake_shut_down_notifier(&battery->fsd_notifier_block);
 #endif
-
+#if defined(ANDROID_ALARM_ACTIVATED)
+	hrtimer_cancel(&battery->event_termination_hrtimer);
+#else
 	alarm_cancel(&battery->event_termination_alarm);
+#endif
 	flush_workqueue(battery->monitor_wqueue);
 	destroy_workqueue(battery->monitor_wqueue);
 	wake_lock_destroy(&battery->monitor_wake_lock);
@@ -3936,7 +3966,11 @@ static int sec_battery_prepare(struct device *dev)
 		cancel_delayed_work(&battery->polling_work);
 		break;
 	case SEC_BATTERY_MONITOR_ALARM:
+#if defined(ANDROID_ALARM_ACTIVATED)
+		/*hrtimer_cancel(&battery->polling_hrtimer);*/
+#else
 		/*alarm_cancel(&battery->polling_alarm);*/
+#endif
 		break;
 	default:
 		break;
