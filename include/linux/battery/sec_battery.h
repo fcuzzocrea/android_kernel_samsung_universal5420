@@ -25,7 +25,7 @@
 #include "../arch/arm/mach-exynos/board-universal5420.h"
 #endif
 #if defined(ANDROID_ALARM_ACTIVATED)
-#include <linux/android_alarm.h>
+#include <linux/hrtimer.h>
 #endif
 #include <linux/alarmtimer.h>
 #include <linux/wakelock.h>
@@ -94,14 +94,22 @@ struct sec_battery_info {
 	bool polling_short;
 
 	struct delayed_work polling_work;
+#if defined(ANDROID_ALARM_ACTIVATED)
+	struct hrtimer polling_hrtimer;
+#else
 	struct alarm polling_alarm;
+#endif
 	ktime_t last_poll_time;
 
 	/* event set */
 	unsigned int event;
 	unsigned int event_wait;
 
+#if defined(ANDROID_ALARM_ACTIVATED)
+	struct hrtimer event_termination_hrtimer;
+#else
 	struct alarm event_termination_alarm;
+#endif
 
 	ktime_t	last_event_time;
 
