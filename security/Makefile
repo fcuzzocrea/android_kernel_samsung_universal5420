@@ -28,3 +28,10 @@ obj-$(CONFIG_CGROUP_DEVICE)		+= device_cgroup.o
 # Object integrity file lists
 subdir-$(CONFIG_INTEGRITY)		+= integrity
 obj-$(CONFIG_INTEGRITY)			+= integrity/built-in.o
+
+# TIMA uevent 
+ifeq ($(TIMA_ENABLED),1)
+obj-y     += tima_uevent/
+#ICCC
+obj-$(CONFIG_TZ_ICCC)	  += tz_iccc/
+endif

@@ -29,7 +29,9 @@
 #define ECRYPTFS_KERNEL_H
 
 #include <keys/user-type.h>
+#if defined(CONFIG_ENCRYPTED_KEYS) || defined(CONFIG_ENCRYPTED_KEYS_MODULE)
 #include <keys/encrypted-type.h>
+#endif
 #include <linux/fs.h>
 #include <linux/fs_stack.h>
 #include <linux/namei.h>
@@ -38,6 +40,13 @@
 #include <linux/nsproxy.h>
 #include <linux/backing-dev.h>
 #include <linux/ecryptfs.h>
+
+#ifdef CONFIG_WTL_ENCRYPTION_FILTER
+#define ENC_NAME_FILTER_MAX_INSTANCE 5
+#define ENC_NAME_FILTER_MAX_LEN (256*5)
+#define ENC_EXT_FILTER_MAX_INSTANCE 60
+#define ENC_EXT_FILTER_MAX_LEN 16
+#endif
 
 #define ECRYPTFS_DEFAULT_IV_BYTES 16
 #define ECRYPTFS_DEFAULT_EXTENT_SIZE 4096
@@ -48,6 +57,9 @@
 #define ECRYPTFS_DEFAULT_NUM_USERS 4
 #define ECRYPTFS_MAX_NUM_USERS 32768
 #define ECRYPTFS_XATTR_NAME "user.ecryptfs"
+
+#define ECRYPTFS_BASE_PATH_SIZE 1024
+#define ECRYPTFS_LABEL_SIZE 1024
 
 void ecryptfs_dump_auth_tok(struct ecryptfs_auth_tok *auth_tok);
 extern void ecryptfs_to_hex(char *dst, char *src, size_t src_size);
@@ -168,8 +180,10 @@ ecryptfs_get_key_payload_data(struct key *key)
 					   + ECRYPTFS_SIG_SIZE + 1 + 1)
 #define ECRYPTFS_FEK_ENCRYPTED_FILENAME_PREFIX "ECRYPTFS_FEK_ENCRYPTED."
 #define ECRYPTFS_FEK_ENCRYPTED_FILENAME_PREFIX_SIZE 23
-#define ECRYPTFS_FNEK_ENCRYPTED_FILENAME_PREFIX "ECRYPTFS_FNEK_ENCRYPTED."
-#define ECRYPTFS_FNEK_ENCRYPTED_FILENAME_PREFIX_SIZE 24
+//#define ECRYPTFS_FNEK_ENCRYPTED_FILENAME_PREFIX "ECRYPTFS_FNEK_ENCRYPTED."
+//#define ECRYPTFS_FNEK_ENCRYPTED_FILENAME_PREFIX_SIZE 24
+#define ECRYPTFS_FNEK_ENCRYPTED_FILENAME_PREFIX "EN."
+#define ECRYPTFS_FNEK_ENCRYPTED_FILENAME_PREFIX_SIZE 3
 #define ECRYPTFS_ENCRYPTED_DENTRY_NAME_LEN (18 + 1 + 4 + 1 + 32)
 
 struct ecryptfs_key_sig {
@@ -211,6 +225,10 @@ struct ecryptfs_crypt_stat {
 #define ECRYPTFS_ENCFN_USE_FEK        0x00001000
 #define ECRYPTFS_UNLINK_SIGS          0x00002000
 #define ECRYPTFS_I_SIZE_INITIALIZED   0x00004000
+#ifdef CONFIG_WTL_ENCRYPTION_FILTER
+#define ECRYPTFS_ENCRYPTED_OTHER_DEVICE 0x00008000
+#endif
+
 	u32 flags;
 	unsigned int file_version;
 	size_t iv_bytes;
@@ -318,6 +336,10 @@ struct ecryptfs_mount_crypt_stat {
 #define ECRYPTFS_GLOBAL_ENCFN_USE_MOUNT_FNEK   0x00000020
 #define ECRYPTFS_GLOBAL_ENCFN_USE_FEK          0x00000040
 #define ECRYPTFS_GLOBAL_MOUNT_AUTH_TOK_ONLY    0x00000080
+#ifdef CONFIG_WTL_ENCRYPTION_FILTER
+#define ECRYPTFS_ENABLE_FILTERING              0x00000100
+#define ECRYPTFS_ENABLE_NEW_PASSTHROUGH        0x00000200
+#endif
 	u32 flags;
 	struct list_head global_auth_tok_list;
 	struct mutex global_auth_tok_list_mutex;
@@ -328,6 +350,33 @@ struct ecryptfs_mount_crypt_stat {
 	unsigned char global_default_fn_cipher_name[
 		ECRYPTFS_MAX_CIPHER_NAME_SIZE + 1];
 	char global_default_fnek_sig[ECRYPTFS_SIG_SIZE_HEX + 1];
+#ifdef CONFIG_WTL_ENCRYPTION_FILTER
+	int max_name_filter_len;
+	char enc_filter_name[ENC_NAME_FILTER_MAX_INSTANCE]
+				[ENC_NAME_FILTER_MAX_LEN + 1];
+	char enc_filter_ext[ENC_EXT_FILTER_MAX_INSTANCE]
+				[ENC_EXT_FILTER_MAX_LEN + 1];
+#endif
+
+};
+
+#define ECRYPTFS_OVERRIDE_ROOT_CRED(saved_cred) \
+	saved_cred = ecryptfs_override_fsids(0, 0); \
+	if (!saved_cred) { return -ENOMEM; }
+
+#define ECRYPTFS_REVERT_CRED(saved_cred)	ecryptfs_revert_fsids(saved_cred)
+
+typedef enum {
+	TYPE_E_NONE,
+	TYPE_E_DEFAULT,
+	TYPE_E_READ,
+	TYPE_E_WRITE,
+} propagate_type_t;
+
+struct ecryptfs_propagate_stat {
+	char base_path[ECRYPTFS_BASE_PATH_SIZE];
+	propagate_type_t propagate_type;
+	char label[ECRYPTFS_LABEL_SIZE];
 };
 
 /* superblock private data. */
@@ -335,6 +384,7 @@ struct ecryptfs_sb_info {
 	struct super_block *wsi_sb;
 	struct ecryptfs_mount_crypt_stat mount_crypt_stat;
 	struct backing_dev_info bdi;
+	struct ecryptfs_propagate_stat propagate_stat;
 };
 
 /* file private data. */
@@ -532,6 +582,7 @@ extern const struct inode_operations ecryptfs_main_iops;
 extern const struct inode_operations ecryptfs_dir_iops;
 extern const struct inode_operations ecryptfs_symlink_iops;
 extern const struct super_operations ecryptfs_sops;
+extern const struct super_operations ecryptfs_multimount_sops;
 extern const struct dentry_operations ecryptfs_dops;
 extern const struct address_space_operations ecryptfs_aops;
 extern int ecryptfs_verbosity;
@@ -615,6 +666,11 @@ int ecryptfs_generate_key_packet_set(char *dest_base,
 int
 ecryptfs_parse_packet_set(struct ecryptfs_crypt_stat *crypt_stat,
 			  unsigned char *src, struct dentry *ecryptfs_dentry);
+/* Do not directly use this function. Use ECRYPTFS_OVERRIDE_CRED() instead. */
+const struct cred * ecryptfs_override_fsids(uid_t fsuid, gid_t fsgid);
+/* Do not directly use this function, use ECRYPTFS_REVERT_CRED() instead. */
+void ecryptfs_revert_fsids(const struct cred * old_cred);
+
 int ecryptfs_truncate(struct dentry *dentry, loff_t new_length);
 ssize_t
 ecryptfs_getxattr_lower(struct dentry *lower_dentry, const char *name,
@@ -711,5 +767,12 @@ int ecryptfs_set_f_namelen(long *namelen, long lower_namelen,
 			   struct ecryptfs_mount_crypt_stat *mount_crypt_stat);
 int ecryptfs_derive_iv(char *iv, struct ecryptfs_crypt_stat *crypt_stat,
 		       loff_t offset);
+
+#ifdef CONFIG_WTL_ENCRYPTION_FILTER
+extern int is_file_name_match(struct ecryptfs_mount_crypt_stat *mcs,
+			      struct dentry *fp_dentry);
+extern int is_file_ext_match(struct ecryptfs_mount_crypt_stat *mcs,
+			     char *str);
+#endif
 
 #endif /* #ifndef ECRYPTFS_KERNEL_H */
