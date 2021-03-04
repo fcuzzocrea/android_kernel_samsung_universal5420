@@ -1445,6 +1445,24 @@ int zap_vma_ptes(struct vm_area_struct *vma, unsigned long address,
 }
 EXPORT_SYMBOL_GPL(zap_vma_ptes);
 
+static inline bool can_follow_write_pte(pte_t pte, struct page *page,
+					unsigned int flags)
+{
+	if (pte_write(pte))
+		return true;
+
+	/*
+	 * Make sure that we are really following CoWed page. We do not really
+	 * have to care about exclusiveness of the page because we only want
+	 * to ensure that once COWed page hasn't disappeared in the meantime
+	 * or it hasn't been merged to a KSM page.
+	 */
+	if ((flags & FOLL_FORCE) && (flags & FOLL_COW))
+		return page && PageAnon(page) && !PageKsm(page);
+
+	return false;
+}
+
 /**
  * follow_page - look up a page descriptor from a user-virtual address
  * @vma: vm_area_struct mapping @address
@@ -1527,10 +1545,13 @@ split_fallthrough:
 	pte = *ptep;
 	if (!pte_present(pte))
 		goto no_page;
-	if ((flags & FOLL_WRITE) && !pte_write(pte))
-		goto unlock;
 
 	page = vm_normal_page(vma, address, pte);
+	if ((flags & FOLL_WRITE) && !can_follow_write_pte(pte, page, flags)) {
+		pte_unmap_unlock(ptep, ptl);
+		return NULL;
+	}
+
 	if (unlikely(!page)) {
 		if ((flags & FOLL_DUMP) ||
 		    !is_zero_pfn(pte_pfn(pte)))
@@ -1573,7 +1594,7 @@ split_fallthrough:
 			unlock_page(page);
 		}
 	}
-unlock:
+
 	pte_unmap_unlock(ptep, ptl);
 out:
 	return page;
@@ -1670,7 +1691,7 @@ int __get_user_pages(struct task_struct *tsk, struct mm_struct *mm,
 
 	VM_BUG_ON(!!pages != !!(gup_flags & FOLL_GET));
 
-	/* 
+	/*
 	 * Require read or write permissions.
 	 * If FOLL_FORCE is set, we only require the "MAY" flags.
 	 */
@@ -1807,17 +1828,13 @@ int __get_user_pages(struct task_struct *tsk, struct mm_struct *mm,
 				 * The VM_FAULT_WRITE bit tells us that
 				 * do_wp_page has broken COW when necessary,
 				 * even if maybe_mkwrite decided not to set
-				 * pte_write. We can thus safely do subsequent
-				 * page lookups as if they were reads. But only
-				 * do so when looping for pte_write is futile:
-				 * in some cases userspace may also be wanting
-				 * to write to the gotten user page, which a
-				 * read fault here might prevent (a readonly
-				 * page might get reCOWed by userspace write).
+				 * pte_write. We cannot simply drop FOLL_WRITE
+				 * here because the COWed page might be gone by
+				 * the time we do the subsequent page lookups.
 				 */
 				if ((ret & VM_FAULT_WRITE) &&
 				    !(vma->vm_flags & VM_WRITE))
-					foll_flags &= ~FOLL_WRITE;
+					foll_flags |= FOLL_COW;
 
 				cond_resched();
 			}
@@ -2328,6 +2345,53 @@ int remap_pfn_range(struct vm_area_struct *vma, unsigned long addr,
 	return err;
 }
 EXPORT_SYMBOL(remap_pfn_range);
+
+/**
+ * vm_iomap_memory - remap memory to userspace
+ * @vma: user vma to map to
+ * @start: start of area
+ * @len: size of area
+ *
+ * This is a simplified io_remap_pfn_range() for common driver use. The
+ * driver just needs to give us the physical memory range to be mapped,
+ * we'll figure out the rest from the vma information.
+ *
+ * NOTE! Some drivers might want to tweak vma->vm_page_prot first to get
+ * whatever write-combining details or similar.
+ */
+int vm_iomap_memory(struct vm_area_struct *vma, phys_addr_t start, unsigned long len)
+{
+	unsigned long vm_len, pfn, pages;
+
+	/* Check that the physical memory area passed in looks valid */
+	if (start + len < start)
+		return -EINVAL;
+	/*
+	 * You *really* shouldn't map things that aren't page-aligned,
+	 * but we've historically allowed it because IO memory might
+	 * just have smaller alignment.
+	 */
+	len += start & ~PAGE_MASK;
+	pfn = start >> PAGE_SHIFT;
+	pages = (len + ~PAGE_MASK) >> PAGE_SHIFT;
+	if (pfn + pages < pfn)
+		return -EINVAL;
+
+	/* We start the mapping 'vm_pgoff' pages into the area */
+	if (vma->vm_pgoff > pages)
+		return -EINVAL;
+	pfn += vma->vm_pgoff;
+	pages -= vma->vm_pgoff;
+
+	/* Can we fit all of the mapping? */
+	vm_len = vma->vm_end - vma->vm_start;
+	if (vm_len >> PAGE_SHIFT > pages)
+		return -EINVAL;
+
+	/* Ok, let it rip */
+	return io_remap_pfn_range(vma, vma->vm_start, pfn, vm_len, vma->vm_page_prot);
+}
+EXPORT_SYMBOL(vm_iomap_memory);
 
 static int apply_to_pte_range(struct mm_struct *mm, pmd_t *pmd,
 				     unsigned long addr, unsigned long end,
@@ -2944,6 +3008,10 @@ static int do_swap_page(struct mm_struct *mm, struct vm_area_struct *vma,
 		delayacct_clear_flag(DELAYACCT_PF_SWAPIN);
 		goto out_release;
 	}
+#ifdef CONFIG_ZSWAP
+	else if (!(flags & FAULT_FLAG_TRIED))
+		swap_cache_hit(vma);
+#endif
 
 	locked = lock_page_or_retry(page, mm, flags);
 	delayacct_clear_flag(DELAYACCT_PF_SWAPIN);
@@ -3111,6 +3179,10 @@ static int do_anonymous_page(struct mm_struct *mm, struct vm_area_struct *vma,
 	pte_t entry;
 
 	pte_unmap(page_table);
+
+	/* File mapping without ->vm_ops ? */
+	if (vma->vm_flags & VM_SHARED)
+		return VM_FAULT_SIGBUS;
 
 	/* Check if we need to add a guard page to the stack */
 	if (check_stack_guard_page(vma, address) < 0)
@@ -3371,6 +3443,9 @@ static int do_linear_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 			- vma->vm_start) >> PAGE_SHIFT) + vma->vm_pgoff;
 
 	pte_unmap(page_table);
+	/* The VMA was not fully populated on mmap() or missing VM_DONTEXPAND */
+	if (!vma->vm_ops->fault)
+		return VM_FAULT_SIGBUS;
 	return __do_fault(mm, vma, address, pmd, pgoff, flags, orig_pte);
 }
 
@@ -3429,13 +3504,12 @@ int handle_pte_fault(struct mm_struct *mm,
 	entry = *pte;
 	if (!pte_present(entry)) {
 		if (pte_none(entry)) {
-			if (vma->vm_ops) {
-				if (likely(vma->vm_ops->fault))
-					return do_linear_fault(mm, vma, address,
+			if (vma->vm_ops)
+				return do_linear_fault(mm, vma, address,
 						pte, pmd, flags, entry);
-			}
+
 			return do_anonymous_page(mm, vma, address,
-						 pte, pmd, flags);
+					pte, pmd, flags);
 		}
 		if (pte_file(entry))
 			return do_nonlinear_fault(mm, vma, address,

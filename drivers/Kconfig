@@ -96,6 +96,8 @@ source "drivers/memstick/Kconfig"
 
 source "drivers/leds/Kconfig"
 
+source "drivers/switch/Kconfig"
+
 source "drivers/accessibility/Kconfig"
 
 source "drivers/infiniband/Kconfig"
@@ -139,5 +141,19 @@ source "drivers/rpmsg/Kconfig"
 source "drivers/virt/Kconfig"
 
 source "drivers/devfreq/Kconfig"
+
+source "drivers/motor/Kconfig"
+
+source "drivers/fingerprint/Kconfig"
+
+source "drivers/sensorhub/stm/Kconfig"
+
+source "drivers/sensors/Kconfig"
+
+source "drivers/battery/Kconfig"
+
+source "drivers/gud/Kconfig"
+
+source "drivers/ice4_fpga/Kconfig"
 
 endmenu

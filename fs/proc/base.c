@@ -137,6 +137,12 @@ struct pid_entry {
 
 static int proc_fd_permission(struct inode *inode, int mask);
 
+/* ANDROID is for special files in /proc. */
+#define ANDROID(NAME, MODE, OTYPE)			\
+	NOD(NAME, (S_IFREG|(MODE)),			\
+		&proc_##OTYPE##_inode_operations,	\
+		&proc_##OTYPE##_operations, {})
+
 /*
  * Count the number of hardlinks for the pid_entry table, excluding the .
  * and .. links.
@@ -205,39 +211,7 @@ struct mm_struct *mm_for_maps(struct task_struct *task)
 
 static int proc_pid_cmdline(struct task_struct *task, char * buffer)
 {
-	int res = 0;
-	unsigned int len;
-	struct mm_struct *mm = get_task_mm(task);
-	if (!mm)
-		goto out;
-	if (!mm->arg_end)
-		goto out_mm;	/* Shh! No looking before we're done */
-
- 	len = mm->arg_end - mm->arg_start;
- 
-	if (len > PAGE_SIZE)
-		len = PAGE_SIZE;
- 
-	res = access_process_vm(task, mm->arg_start, buffer, len, 0);
-
-	// If the nul at the end of args has been overwritten, then
-	// assume application is using setproctitle(3).
-	if (res > 0 && buffer[res-1] != '\0' && len < PAGE_SIZE) {
-		len = strnlen(buffer, res);
-		if (len < res) {
-		    res = len;
-		} else {
-			len = mm->env_end - mm->env_start;
-			if (len > PAGE_SIZE - res)
-				len = PAGE_SIZE - res;
-			res += access_process_vm(task, mm->env_start, buffer+res, len, 0);
-			res = strnlen(buffer, res);
-		}
-	}
-out_mm:
-	mmput(mm);
-out:
-	return res;
+	return get_cmdline(task, buffer, PAGE_SIZE);
 }
 
 static int proc_pid_auxv(struct task_struct *task, char *buffer)
@@ -713,7 +687,8 @@ static ssize_t mem_rw(struct file *file, char __user *buf,
 	ssize_t copied;
 	char *page;
 
-	if (!mm)
+	/* Ensure the process spawned far enough to have an environment. */
+	if (!mm || !mm->env_end)
 		return 0;
 
 	page = (char *)__get_free_page(GFP_TEMPORARY);
@@ -968,6 +943,35 @@ err_task_lock:
 out:
 	return err < 0 ? err : count;
 }
+
+static int oom_adjust_permission(struct inode *inode, int mask)
+{
+	uid_t uid;
+	struct task_struct *p;
+
+	p = get_proc_task(inode);
+	if(p) {
+		uid = task_uid(p);
+		put_task_struct(p);
+	}
+
+	/*
+	 * System Server (uid == 1000) is granted access to oom_adj of all 
+	 * android applications (uid > 10000) as and services (uid >= 1000)
+	 */
+	if (p && (current_fsuid() == 1000) && (uid >= 1000)) {
+		if (inode->i_mode >> 6 & mask) {
+			return 0;
+		}
+	}
+
+	/* Fall back to default. */
+	return generic_permission(inode, mask);
+}
+
+static const struct inode_operations proc_oom_adjust_inode_operations = {
+	.permission	= oom_adjust_permission,
+};
 
 static const struct file_operations proc_oom_adjust_operations = {
 	.read		= oom_adjust_read,
@@ -2987,6 +2991,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 #ifdef CONFIG_PROC_PAGE_MONITOR
 	REG("clear_refs", S_IWUSR, proc_clear_refs_operations),
 	REG("smaps",      S_IRUGO, proc_pid_smaps_operations),
+	REG("smaps_simple", S_IRUGO, proc_pid_smaps_simple_operations),
 	REG("pagemap",    S_IRUGO, proc_pagemap_operations),
 #endif
 #ifdef CONFIG_SECURITY
@@ -3011,7 +3016,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 	REG("cgroup",  S_IRUGO, proc_cgroup_operations),
 #endif
 	INF("oom_score",  S_IRUGO, proc_oom_score),
-	REG("oom_adj",    S_IRUGO|S_IWUSR, proc_oom_adjust_operations),
+	ANDROID("oom_adj",S_IRUGO|S_IWUSR, oom_adjust),
 	REG("oom_score_adj", S_IRUGO|S_IWUSR, proc_oom_score_adj_operations),
 #ifdef CONFIG_AUDITSYSCALL
 	REG("loginuid",   S_IWUSR|S_IRUGO, proc_loginuid_operations),

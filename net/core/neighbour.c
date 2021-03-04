@@ -297,8 +297,10 @@ static struct neighbour *neigh_alloc(struct neigh_table *tbl, struct net_device 
 		sz += dev->neigh_priv_len;
 		n = kzalloc(sz, GFP_ATOMIC);
 	}
-	if (!n)
+	if (!n) {
+		printk(KERN_WARNING "kzalloc() failed.\n");
 		goto out_entries;
+	}
 
 	skb_queue_head_init(&n->arp_queue);
 	rwlock_init(&n->lock);
@@ -482,6 +484,7 @@ struct neighbour *neigh_create(struct neigh_table *tbl, const void *pkey,
 	struct neigh_hash_table *nht;
 
 	if (!n) {
+		printk(KERN_WARNING "neigh_alloc() failed by no buffer.\n");
 		rc = ERR_PTR(-ENOBUFS);
 		goto out;
 	}
@@ -713,7 +716,7 @@ void neigh_destroy(struct neighbour *neigh)
 
 	if (!neigh->dead) {
 		printk(KERN_WARNING
-		       "Destroying alive neighbour %p\n", neigh);
+		       "Destroying alive neighbour %pK\n", neigh);
 		dump_stack();
 		return;
 	}
@@ -1308,7 +1311,7 @@ int neigh_resolve_output(struct neighbour *neigh, struct sk_buff *skb)
 out:
 	return rc;
 discard:
-	NEIGH_PRINTK1("neigh_resolve_output: dst=%p neigh=%p\n",
+	NEIGH_PRINTK1("neigh_resolve_output: dst=%pK neigh=%pK\n",
 		      dst, neigh);
 out_kfree_skb:
 	rc = -EINVAL;

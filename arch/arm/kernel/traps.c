@@ -36,7 +36,9 @@
 #include <asm/system_misc.h>
 
 #include "signal.h"
-
+#ifdef CONFIG_SEC_DEBUG_SUBSYS
+#include <mach/sec_debug.h>
+#endif
 static const char *handler[]= { "prefetch abort", "data abort", "address exception", "interrupt" };
 
 void *vectors_page;
@@ -292,10 +294,23 @@ void die(const char *str, struct pt_regs *regs, int err)
 	raw_spin_unlock_irq(&die_lock);
 	oops_exit();
 
+#ifdef CONFIG_SEC_DEBUG_SUBSYS
+	sec_debug_save_die_info(str, regs);
+#endif
+
+#ifdef CONFIG_SEC_DEBUG
+	if (in_interrupt())
+		panic("%-51s\nPC is at %-42pS\nLR is at %-42pS",
+				"Fatal exception in interrupt", (void *)regs->ARM_pc, (void *)regs->ARM_lr);
+	if (panic_on_oops)
+		panic("%-51s\nPC is at %-42pS\nLR is at %-42pS",
+				"Fatal exception", (void *)regs->ARM_pc, (void *)regs->ARM_lr);
+#else
 	if (in_interrupt())
 		panic("Fatal exception in interrupt");
 	if (panic_on_oops)
 		panic("Fatal exception");
+#endif
 	if (ret != NOTIFY_STOP)
 		do_exit(SIGSEGV);
 }
@@ -557,7 +572,7 @@ asmlinkage int arm_syscall(int no, struct pt_regs *regs)
 		return regs->ARM_r0;
 
 	case NR(set_tls):
-		thread->tp_value = regs->ARM_r0;
+		thread->tp_value[0] = regs->ARM_r0;
 		if (tls_emu)
 			return 0;
 		if (has_tls_reg) {
@@ -675,7 +690,7 @@ static int get_tp_trap(struct pt_regs *regs, unsigned int instr)
 	int reg = (instr >> 12) & 15;
 	if (reg == 15)
 		return 1;
-	regs->uregs[reg] = current_thread_info()->tp_value;
+	regs->uregs[reg] = current_thread_info()->tp_value[0];
 	regs->ARM_pc += 4;
 	return 0;
 }
