@@ -81,7 +81,8 @@ static void		ip6_rt_update_pmtu(struct dst_entry *dst, u32 mtu);
 #ifdef CONFIG_IPV6_ROUTE_INFO
 static struct rt6_info *rt6_add_route_info(struct net_device *dev,
 					   const struct in6_addr *prefix, int prefixlen,
-					   const struct in6_addr *gwaddr, unsigned pref);
+					   const struct in6_addr *gwaddr,
+					   unsigned pref);
 static struct rt6_info *rt6_get_route_info(struct net_device *dev,
 					   const struct in6_addr *prefix, int prefixlen,
 					   const struct in6_addr *gwaddr);
@@ -574,7 +575,6 @@ static struct rt6_info *rt6_select(struct fib6_node *fn, int oif, int strict)
 int rt6_route_rcv(struct net_device *dev, u8 *opt, int len,
 		  const struct in6_addr *gwaddr)
 {
-
 	struct route_info *rinfo = (struct route_info *) opt;
 	struct in6_addr prefix_buf, *prefix;
 	unsigned int pref;
@@ -928,8 +928,8 @@ struct dst_entry * ip6_route_output(struct net *net, const struct sock *sk,
 				    struct flowi6 *fl6)
 {
 	int flags = 0;
-	
-	fl6->flowi6_iif = LOOPBACK_IFINDEX;
+
+	fl6->flowi6_iif = net->loopback_dev->ifindex;
 
 	if ((sk && sk->sk_bound_dev_if) || rt6_need_strict(&fl6->daddr))
 		flags |= RT6_LOOKUP_F_IFACE;
@@ -1031,10 +1031,13 @@ static void ip6_link_failure(struct sk_buff *skb)
 
 	rt = (struct rt6_info *) skb_dst(skb);
 	if (rt) {
-		if (rt->rt6i_flags & RTF_CACHE)
-			rt6_update_expires(rt, 0);
-		else if (rt->rt6i_node && (rt->rt6i_flags & RTF_DEFAULT))
+		if (rt->rt6i_flags & RTF_CACHE) {
+			dst_hold(&rt->dst);
+			if (ip6_del_rt(rt))
+				dst_free(&rt->dst);
+		} else if (rt->rt6i_node && (rt->rt6i_flags & RTF_DEFAULT)) {
 			rt->rt6i_node->fn_sernum = -1;
+		}
 	}
 }
 
@@ -1888,7 +1891,8 @@ out:
 
 static struct rt6_info *rt6_add_route_info(struct net_device *dev,
 					   const struct in6_addr *prefix, int prefixlen,
-					   const struct in6_addr *gwaddr, unsigned pref)
+					   const struct in6_addr *gwaddr,
+					   unsigned pref)
 {
 	struct fib6_config cfg = {
 		.fc_table	= addrconf_rt_table(dev, RT6_TABLE_INFO),
@@ -1943,7 +1947,6 @@ struct rt6_info *rt6_add_dflt_router(const struct in6_addr *gwaddr,
 				     unsigned int pref)
 {
 	struct fib6_config cfg = {
-		.fc_table	= RT6_TABLE_DFLT,
 		.fc_table	= addrconf_rt_table(dev, RT6_TABLE_DFLT),
 		.fc_ifindex	= dev->ifindex,
 		.fc_flags	= RTF_GATEWAY | RTF_ADDRCONF | RTF_DEFAULT |
@@ -1959,6 +1962,7 @@ struct rt6_info *rt6_add_dflt_router(const struct in6_addr *gwaddr,
 
 	return rt6_get_dflt_router(gwaddr, dev);
 }
+
 
 int rt6_addrconf_purge(struct rt6_info *rt, void *arg) {
 	if (rt->rt6i_flags & (RTF_DEFAULT | RTF_ADDRCONF) &&
@@ -2581,6 +2585,9 @@ static int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void
 
 	if (tb[RTA_OIF])
 		oif = nla_get_u32(tb[RTA_OIF]);
+
+	if (tb[RTA_MARK])
+		fl6.flowi6_mark = nla_get_u32(tb[RTA_MARK]);
 
 	if (tb[RTA_UID])
 		fl6.flowi6_uid = nla_get_u32(tb[RTA_UID]);

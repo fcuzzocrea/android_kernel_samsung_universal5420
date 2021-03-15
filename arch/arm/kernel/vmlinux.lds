@@ -1,7 +1,7 @@
 /*
  *
  * Automatically generated file; DO NOT EDIT.
- * Linux/arm 3.4.39 Kernel Configuration
+ * Linux/arm 3.4.67 Kernel Configuration
  *
  */
 /*
@@ -466,6 +466,22 @@ SECTIONS
  _etext = .; /* End of text and rodata section */
  . = ALIGN((1 << 12));
  __init_begin = .;
+ /*
+	 * The vectors and stubs are relocatable code, and the
+	 * only thing that matters is their relative offsets
+	 */
+ __vectors_start = .;
+ .vectors 0 : AT(__vectors_start) {
+  *(.vectors)
+ }
+ . = __vectors_start + SIZEOF(.vectors);
+ __vectors_end = .;
+ __stubs_start = .;
+ .stubs 0x1000 : AT(__stubs_start) {
+  *(.stubs)
+ }
+ . = __stubs_start + SIZEOF(.stubs);
+ __stubs_end = .;
  . = ALIGN(8); .init.text : AT(ADDR(.init.text) - 0) { _sinittext = .; *(.init.text) *(.meminit.text) _einittext = .; }
  .exit.text : {
   *(.exit.text) *(.memexit.text)

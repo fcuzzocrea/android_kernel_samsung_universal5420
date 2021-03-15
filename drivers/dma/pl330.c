@@ -1827,18 +1827,14 @@ static int pl330_update(const struct pl330_info *pi)
 			if (active == -1) /* Aborted */
 				continue;
 
+			/* Detach the req */
 			rqdone = thrd->req[active].r;
+			thrd->req[active].r = NULL;
 
-			if (!rqdone->infiniteloop) {
+			mark_free(thrd, active);
 
-				/* Detach the req */
-				thrd->req[active].r = NULL;
-
-				mark_free(thrd, active);
-
-				/* Get going again ASAP */
-				_start(thrd);
-			}
+			/* Get going again ASAP */
+			_start(thrd);
 
 			/* For now, just make a list of callbacks to be done */
 			list_add_tail(&rqdone->rqd, &pl330->req_done);
@@ -2559,8 +2555,8 @@ static void pl330_free_chan_resources(struct dma_chan *chan)
 	struct dma_pl330_chan *pch = to_pchan(chan);
 	unsigned long flags;
 
-	spin_lock_irqsave(&pch->lock, flags);
 
+	spin_lock_irqsave(&pch->lock, flags);
 	pl330_release_channel(pch->pl330_chid);
 	pch->pl330_chid = NULL;
 

@@ -74,7 +74,6 @@ struct idletimer_tg {
 	bool work_pending;
 	bool send_nl_msg;
 	bool active;
-	bool suspend_time_valid;
 	uid_t uid;
 };
 
@@ -203,7 +202,7 @@ static ssize_t idletimer_tg_show(struct kobject *kobj, struct attribute *attr,
 		return sprintf(buf, "%u\n",
 			       jiffies_to_msecs(expires - now) / 1000);
 
-	if (timer->send_nl_msg)
+	if (timer && timer->send_nl_msg)
 		return sprintf(buf, "0 %d\n",
 			jiffies_to_msecs(now - expires) / 1000);
 	else
@@ -245,13 +244,8 @@ static int idletimer_resume(struct notifier_block *notifier,
 	switch (pm_event) {
 	case PM_SUSPEND_PREPARE:
 		get_monotonic_boottime(&timer->last_suspend_time);
-		timer->suspend_time_valid = true;
 		break;
 	case PM_POST_SUSPEND:
-		if (!timer->suspend_time_valid)
-			break;
-		timer->suspend_time_valid = false;
-
 		spin_lock_bh(&timestamp_lock);
 		if (!timer->active) {
 			spin_unlock_bh(&timestamp_lock);

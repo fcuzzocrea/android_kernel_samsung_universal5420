@@ -37,6 +37,7 @@
 #include <linux/mm.h>
 #include <linux/oom.h>
 #include <linux/sched.h>
+#include <linux/swap.h>
 #include <linux/rcupdate.h>
 #include <linux/notifier.h>
 #include <linux/mutex.h>
@@ -163,7 +164,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int selected_tasksize = 0;
 	int selected_oom_score_adj;
 	int array_size = ARRAY_SIZE(lowmem_adj);
-	int other_free;
+	int other_free = global_page_state(NR_FREE_PAGES) - totalreserve_pages;
 	int other_file;
 	struct reclaim_state *reclaim_state;
 #ifdef CONFIG_SEC_DEBUG_LMK_MEMINFO
@@ -442,8 +443,8 @@ static int android_oom_handler(struct notifier_block *nb,
 		selected = p;
 		selected_tasksize = tasksize;
 		selected_oom_score_adj = oom_score_adj;
-		lowmem_print(2, "oom: select %d (%s), adj %d, size %d, to kill\n",
-			     p->pid, p->comm, oom_score_adj, tasksize);
+		lowmem_print(2, "select '%s' (%d), adj %d, size %d, to kill\n",
+			     p->comm, p->pid, oom_score_adj, tasksize);
 #endif
 	}
 #ifdef MULTIPLE_OOM_KILLER
@@ -465,9 +466,18 @@ static int android_oom_handler(struct notifier_block *nb,
 	}
 #else
 	if (selected) {
-		lowmem_print(1, "oom: send sigkill to %d (%s), adj %d, size %d\n",
-			     selected->pid, selected->comm,
-			     selected_oom_score_adj, selected_tasksize);
+		lowmem_print(1, "Killing '%s' (%d), adj %d,\n" \
+				"   to free %ldkB on behalf of '%s' (%d) because\n" \
+				"   cache %ldkB is below limit %ldkB for oom_score_adj %d\n" \
+				"   Free memory is %ldkB above reserved\n",
+			     selected->comm, selected->pid,
+			     selected_oom_score_adj,
+			     selected_tasksize * (long)(PAGE_SIZE / 1024),
+			     current->comm, current->pid,
+			     other_file * (long)(PAGE_SIZE / 1024),
+			     minfree * (long)(PAGE_SIZE / 1024),
+			     min_score_adj,
+			     other_free * (long)(PAGE_SIZE / 1024));
 		send_sig(SIGKILL, selected, 0);
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
 		rem -= selected_tasksize;

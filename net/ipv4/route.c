@@ -2158,9 +2158,10 @@ static int __mkroute_input(struct sk_buff *skb,
 		flags |= RTCF_DIRECTSRC;
 
 	if (out_dev == in_dev && err &&
+	    skb->protocol == htons(ETH_P_IP) &&
 	    (IN_DEV_SHARED_MEDIA(out_dev) ||
 	     inet_addr_onlink(out_dev, saddr, FIB_RES_GW(*res))))
-		flags |= RTCF_DOREDIRECT;
+		IPCB(skb)->flags |= IPSKB_DOREDIRECT;
 
 	if (skb->protocol != htons(ETH_P_IP)) {
 		/* Not IP (i.e. ARP). Do not create route, if it is
@@ -2989,6 +2990,8 @@ static int rt_fill_info(struct net *net,
 	r->rtm_flags	= (rt->rt_flags & ~0xFFFF) | RTM_F_CLONED;
 	if (rt->rt_flags & RTCF_NOTIFY)
 		r->rtm_flags |= RTM_F_NOTIFY;
+	if (IPCB(skb)->flags & IPSKB_DOREDIRECT)
+		r->rtm_flags |= RTCF_DOREDIRECT;
 
 	NLA_PUT_BE32(skb, RTA_DST, rt->rt_dst);
 
@@ -3016,7 +3019,7 @@ static int rt_fill_info(struct net *net,
 	if (rt->rt_mark)
 		NLA_PUT_BE32(skb, RTA_MARK, rt->rt_mark);
 
-	if (uid_valid(rt->rt_uid))
+	if (rt->rt_uid != (uid_t) -1)
 		NLA_PUT_BE32(skb, RTA_UID, rt->rt_uid);
 
 	error = rt->dst.error;

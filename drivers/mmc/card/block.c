@@ -37,6 +37,9 @@
 #include <linux/blktrace_api.h>
 #include <linux/sysfs.h>
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/mmc.h>
+
 #include <linux/mmc/ioctl.h>
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
@@ -1101,9 +1104,12 @@ retry:
 			goto out;
 	}
 
-	if (mmc_can_sanitize(card))
+	if (mmc_can_sanitize(card)) {
+		trace_mmc_blk_erase_start(EXT_CSD_SANITIZE_START, 0, 0);
 		err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 				 EXT_CSD_SANITIZE_START, 1, 0);
+		trace_mmc_blk_erase_end(EXT_CSD_SANITIZE_START, 0, 0);
+	}
 out_retry:
 	if (err && !mmc_blk_reset(md, card->host, type))
 		goto retry;
@@ -2092,6 +2098,9 @@ snd_packed_rd:
 	return 0;
 }
 
+static int
+mmc_blk_set_blksize(struct mmc_blk_data *md, struct mmc_card *card);
+
 static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 {
 	int ret;
@@ -2103,6 +2112,13 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 #ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
 	if (mmc_bus_needs_resume(card->host)) {
 		mmc_resume_bus(card->host);
+	}
+#endif
+
+#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
+	if (mmc_bus_needs_resume(card->host)) {
+		mmc_resume_bus(card->host);
+		mmc_blk_set_blksize(md, card);
 	}
 #endif
 
