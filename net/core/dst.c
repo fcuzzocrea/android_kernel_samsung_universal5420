@@ -277,13 +277,17 @@ static void dst_destroy_rcu(struct rcu_head *head)
 void dst_release(struct dst_entry *dst)
 {
 	if (dst) {
-    	int newrefcnt;
+		int newrefcnt;
+		unsigned short nocache = dst->flags & DST_NOCACHE;
 
-        newrefcnt = atomic_dec_return(&dst->__refcnt);
-        WARN_ON(newrefcnt < 0);
-        if (unlikely(dst->flags & DST_NOCACHE) && !newrefcnt)
-        	call_rcu(&dst->rcu_head, dst_destroy_rcu);
-        }
+		newrefcnt = atomic_dec_return(&dst->__refcnt);
+		WARN_ON(newrefcnt < 0);
+		if (!newrefcnt && unlikely(nocache)) {
+			dst = dst_destroy(dst);
+			if (dst)
+				__dst_free(dst);
+		}
+	}
 }
 EXPORT_SYMBOL(dst_release);
 
