@@ -2072,8 +2072,7 @@ static int get_fuelgauge_soc(struct i2c_client *client)
 		}
 
 #if defined(ANDROID_ALARM_ACTIVATED)
-	current_time = alarm_get_elapsed_realtime();
-	ts = ktime_to_timespec(current_time);
+	get_monotonic_boottime(&ts);
 #else
 	current_time = ktime_get_boottime();
 	ts = ktime_to_timespec(current_time);
@@ -2216,8 +2215,7 @@ bool sec_hal_fg_init(struct i2c_client *client)
 	u8 data[2] = {0, 0};
 
 #if defined(ANDROID_ALARM_ACTIVATED)
-	current_time = alarm_get_elapsed_realtime();
-	ts = ktime_to_timespec(current_time);
+	get_monotonic_boottime(&ts);
 #else
 	current_time = ktime_get_boottime();
 	ts = ktime_to_timespec(current_time);
