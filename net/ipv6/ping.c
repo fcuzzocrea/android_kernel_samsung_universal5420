@@ -18,7 +18,6 @@
  *
  */
 
-#include <linux/export.h>
 #include <net/addrconf.h>
 #include <net/ipv6.h>
 #include <net/ip6_route.h>
