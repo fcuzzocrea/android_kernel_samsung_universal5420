@@ -199,7 +199,7 @@ static int fib_uid_range_match(struct flowi *fl, struct fib_rule *rule)
 {
 	return (!uid_valid(rule->uid_start) && !uid_valid(rule->uid_end)) ||
 	       (uid_gte(fl->flowi_uid, rule->uid_start) &&
-			uid_lte(fl->flowi_uid, rule->uid_end));
+		uid_lte(fl->flowi_uid, rule->uid_end));
 }
 
 static int fib_rule_match(struct fib_rule *rule, struct fib_rules_ops *ops,
@@ -396,11 +396,10 @@ static int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 			rule->uid_start = fib_nl_uid(tb[FRA_UID_START]);
 			rule->uid_end = fib_nl_uid(tb[FRA_UID_END]);
 		}
-		
 		if (!uid_valid(rule->uid_start) ||
-			!uid_valid(rule->uid_end) ||
-			!uid_lte(rule->uid_start, rule->uid_end))
-			goto errout_free;
+		    !uid_valid(rule->uid_end) ||
+		    !uid_lte(rule->uid_start, rule->uid_end))
+		goto errout_free;
 	}
 
 	err = ops->configure(rule, skb, frh, tb);
@@ -485,7 +484,8 @@ static int fib_nl_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 		if (frh->action && (frh->action != rule->action))
 			continue;
 
-		if (frh->table && (frh_get_table(frh, tb) != rule->table))
+		if (frh_get_table(frh, tb) &&
+		    (frh_get_table(frh, tb) != rule->table))
 			continue;
 
 		if (tb[FRA_PRIORITY] &&
