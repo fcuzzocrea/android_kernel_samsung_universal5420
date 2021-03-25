@@ -1734,8 +1734,7 @@ static int __ipv6_try_regen_rndid(struct inet6_dev *idev, struct in6_addr *tmpad
 }
 #endif
 
-u32 addrconf_rt_table(const struct net_device *dev, u32 default_table)
-{
+u32 addrconf_rt_table(const struct net_device *dev, u32 default_table) {
 	/* Determines into what table to put autoconf PIO/RIO/default routes
 	 * learned on this device.
 	 *
