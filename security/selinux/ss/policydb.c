@@ -623,7 +623,6 @@ static int common_destroy(void *key, void *datum, void *p)
 	return 0;
 }
 
-
 static void constraint_expr_destroy(struct constraint_expr *expr)
 {
 	if (expr) {

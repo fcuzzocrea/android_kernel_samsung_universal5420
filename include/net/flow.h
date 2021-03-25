@@ -68,7 +68,7 @@ struct flowi4 {
 #define flowi4_proto		__fl_common.flowic_proto
 #define flowi4_flags		__fl_common.flowic_flags
 #define flowi4_secid		__fl_common.flowic_secid
-#define flowi4_uid			__fl_common.flowic_uid
+#define flowi4_uid		__fl_common.flowic_uid
 	/* (saddr,daddr) must be grouped, same order as in IP header */
 	__be32			saddr;
 	__be32			daddr;
@@ -87,7 +87,8 @@ static inline void flowi4_init_output(struct flowi4 *fl4, int oif,
 				      __u32 mark, __u8 tos, __u8 scope,
 				      __u8 proto, __u8 flags,
 				      __be32 daddr, __be32 saddr,
-				      __be16 dport, __be16 sport, uid_t uid)
+				      __be16 dport, __be16 sport,
+				      uid_t uid)
 {
 	fl4->flowi4_oif = oif;
 	fl4->flowi4_iif = 0;
@@ -125,7 +126,7 @@ struct flowi6 {
 #define flowi6_proto		__fl_common.flowic_proto
 #define flowi6_flags		__fl_common.flowic_flags
 #define flowi6_secid		__fl_common.flowic_secid
-#define flowi6_uid			__fl_common.flowic_uid
+#define flowi6_uid		__fl_common.flowic_uid
 	struct in6_addr		daddr;
 	struct in6_addr		saddr;
 	__be32			flowlabel;
