@@ -635,12 +635,6 @@ static int fib_nl_fill_rule(struct sk_buff *skb, struct fib_rule *rule,
 
 	if (uid_valid(rule->uid_end))
 	     nla_put_uid(skb, FRA_UID_END, rule->uid_end);
-
-	if (uid_valid(rule->uid_start))
-	     nla_put_uid(skb, FRA_UID_START, rule->uid_start);
-
-	if (uid_valid(rule->uid_end))
-	     nla_put_uid(skb, FRA_UID_END, rule->uid_end);
 	
 	if (ops->fill(rule, skb, frh) < 0)
 		goto nla_put_failure;
