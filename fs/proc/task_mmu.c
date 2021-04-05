@@ -470,15 +470,15 @@ static void smaps_pte_entry(pte_t ptent, unsigned long addr,
 		if (!non_swap_entry(swpent)) {
 			int mapcount;
 
-			mss->swap += ptent_size;
+			mss->swap += PAGE_SIZE;
 			mapcount = swp_swapcount(swpent);
 			if (mapcount >= 2) {
-				u64 pss_delta = (u64)ptent_size << PSS_SHIFT;
+				u64 pss_delta = (u64)PAGE_SIZE << PSS_SHIFT;
 
 				do_div(pss_delta, mapcount);
 				mss->swap_pss += pss_delta;
 			} else {
-				mss->swap_pss += (u64)ptent_size << PSS_SHIFT;
+				mss->swap_pss += (u64)PAGE_SIZE << PSS_SHIFT;
 			}
 		} else if (is_migration_entry(swpent))
 			page = migration_entry_to_page(swpent);
@@ -1150,7 +1150,8 @@ out:
 
 static int pagemap_open(struct inode *inode, struct file *file)
 {
-	/* do not disclose physical addresses: attack vector */
+	/* do not disclose physical addresses to unprivileged
+	   userspace (closes a rowhammer attack vector) */
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	return 0;
