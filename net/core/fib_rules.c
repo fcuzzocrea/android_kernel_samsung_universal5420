@@ -485,7 +485,8 @@ static int fib_nl_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 		if (frh->action && (frh->action != rule->action))
 			continue;
 
-		if (frh->table && (frh_get_table(frh, tb) != rule->table))
+		if (frh_get_table(frh, tb) &&
+		    (frh_get_table(frh, tb) != rule->table))
 			continue;
 
 		if (tb[FRA_PRIORITY] &&
@@ -629,6 +630,12 @@ static int fib_nl_fill_rule(struct sk_buff *skb, struct fib_rule *rule,
 
 	if (rule->target)
 		NLA_PUT_U32(skb, FRA_GOTO, rule->target);
+
+	if (uid_valid(rule->uid_start))
+	     nla_put_uid(skb, FRA_UID_START, rule->uid_start);
+
+	if (uid_valid(rule->uid_end))
+	     nla_put_uid(skb, FRA_UID_END, rule->uid_end);
 
 	if (uid_valid(rule->uid_start))
 	     nla_put_uid(skb, FRA_UID_START, rule->uid_start);
