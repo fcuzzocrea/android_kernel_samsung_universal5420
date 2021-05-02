@@ -1156,6 +1156,7 @@ static int pagemap_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
+
 const struct file_operations proc_pagemap_operations = {
 	.llseek		= mem_lseek, /* borrow this */
 	.read		= pagemap_read,
